@@ -9,23 +9,18 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# File list - add your plugin's DLL and any extra dependency DLLs here
 $pluginFiles = @(
-    "MyXrmToolBoxPlugin.dll",
-    "MyXrmToolBoxPlugin.pdb"
-    # Add extra dependency DLLs here, for example:
-    # "CsvHelper.dll"
+    "PanopticonAuditHistorySearch.dll",
+    "PanopticonAuditHistorySearch.pdb"
 )
 
-# NuGet dependency DLLs that need to be copied from the NuGet cache.
-# Only add entries here if your plugin uses NuGet packages whose DLLs
-# are not already present in the XrmToolBox Plugins folder.
-$dependencyFiles = @(
-    # Example:
-    # @{
-    #     Name = "Microsoft.Bcl.AsyncInterfaces.dll"
-    #     NuGetPath = "$env:USERPROFILE\.nuget\packages\microsoft.bcl.asyncinterfaces\1.0.0\lib\net461\Microsoft.Bcl.AsyncInterfaces.dll"
-    # }
+# XrmToolBox scans every DLL at the root of Plugins as a candidate tool, so
+# dependencies live in Plugins\Dependencies where it resolves but does not scan them.
+$dependencyDllNames = @(
+    "Microsoft.Data.Sqlite.dll",
+    "SQLitePCLRaw.core.dll",
+    "SQLitePCLRaw.batteries_v2.dll",
+    "SQLitePCLRaw.provider.winsqlite3.dll"
 )
 
 Write-Host "`n=== XRM ToolBox Plugin Deployment ===" -ForegroundColor Cyan
@@ -76,8 +71,8 @@ if (-not $SkipBuild) {
         Write-Host "  [WhatIf] Would run: dotnet build" -ForegroundColor Gray
     }
     else {
-        dotnet clean MyXrmToolBoxPlugin.sln --configuration Release --verbosity quiet
-        dotnet build MyXrmToolBoxPlugin.sln --configuration Release
+        dotnet clean PanopticonAuditHistorySearch.sln --configuration Release --verbosity quiet
+        dotnet build PanopticonAuditHistorySearch.sln --configuration Release
 
         if ($LASTEXITCODE -ne 0) {
             Write-Host "`nBuild failed!" -ForegroundColor Red
@@ -92,8 +87,8 @@ else {
 
 # Verify build output exists
 $buildPath = "bin\Release\net48"
-if (-not (Test-Path "$buildPath\MyXrmToolBoxPlugin.dll")) {
-    Write-Host "`nError: Build output not found at $buildPath\MyXrmToolBoxPlugin.dll" -ForegroundColor Red
+if (-not (Test-Path "$buildPath\PanopticonAuditHistorySearch.dll")) {
+    Write-Host "`nError: Build output not found at $buildPath\PanopticonAuditHistorySearch.dll" -ForegroundColor Red
     exit 1
 }
 
@@ -136,7 +131,11 @@ function Remove-PluginFiles {
     Write-Host "  - Cleaning $Location..." -ForegroundColor Gray
 
     $filesToRemove = @(
-        "$Path\MyXrmToolBoxPlugin*"
+        "$Path\PanopticonAuditHistorySearch*",
+        "$Path\Microsoft.Data.Sqlite.dll",
+        "$Path\SQLitePCLRaw.*.dll",
+        "$Path\Dependencies\Microsoft.Data.Sqlite.dll",
+        "$Path\Dependencies\SQLitePCLRaw.*.dll"
     )
 
     foreach ($filePattern in $filesToRemove) {
@@ -196,56 +195,36 @@ foreach ($file in $pluginFiles) {
     }
 }
 
-# Copy dependencies
-if ($dependencyFiles.Count -gt 0) {
-    Write-Host "`nCopying dependencies..." -ForegroundColor Green
-    foreach ($dep in $dependencyFiles) {
-        $sourcePath = $dep.NuGetPath
-        $fallbackPath = Join-Path $buildPath $dep.Name
+# Copy dependencies into Plugins\Dependencies
+Write-Host "`nCopying dependencies..." -ForegroundColor Green
+$dependenciesPath = Join-Path $pluginsPath "Dependencies"
+if (-not $WhatIf) { New-Item -ItemType Directory -Force $dependenciesPath | Out-Null }
 
-        # Try NuGet cache first
-        if (Test-Path $sourcePath) {
-            try {
-                if ($WhatIf) {
-                    Write-Host "  [WhatIf] Would copy: $($dep.Name) (from NuGet cache)" -ForegroundColor Gray
-                }
-                else {
-                    Copy-Item $sourcePath -Destination $pluginsPath -Force -ErrorAction Stop
-                    Write-Host "  - Copied $($dep.Name) (from NuGet cache)" -ForegroundColor Green
-                }
-            }
-            catch {
-                Write-Host "  - FAILED to copy $($dep.Name): $($_.Exception.Message)" -ForegroundColor Red
-                $deploymentFailed = $true
-            }
-        }
-        # Try build output as fallback
-        elseif (Test-Path $fallbackPath) {
-            Write-Host "  - NuGet cache not found, using build output for $($dep.Name)" -ForegroundColor Yellow
-            try {
-                if ($WhatIf) {
-                    Write-Host "  [WhatIf] Would copy: $($dep.Name) (from build output)" -ForegroundColor Gray
-                }
-                else {
-                    Copy-Item $fallbackPath -Destination $pluginsPath -Force -ErrorAction Stop
-                    Write-Host "  - Copied $($dep.Name) (from build output)" -ForegroundColor Green
-                }
-            }
-            catch {
-                Write-Host "  - FAILED to copy $($dep.Name): $($_.Exception.Message)" -ForegroundColor Red
-                $deploymentFailed = $true
-            }
+foreach ($name in $dependencyDllNames) {
+    $sourcePath = Join-Path $buildPath $name
+    if (-not (Test-Path $sourcePath)) {
+        Write-Host "  - ERROR: $name not found in build output!" -ForegroundColor Red
+        $deploymentFailed = $true
+        continue
+    }
+    try {
+        if ($WhatIf) {
+            Write-Host "  [WhatIf] Would copy: $name -> Dependencies\" -ForegroundColor Gray
         }
         else {
-            Write-Host "  - ERROR: $($dep.Name) not found in NuGet cache or build output!" -ForegroundColor Red
-            $deploymentFailed = $true
+            Copy-Item $sourcePath -Destination $dependenciesPath -Force -ErrorAction Stop
+            Write-Host "  - Copied $name -> Dependencies\" -ForegroundColor Green
         }
+    }
+    catch {
+        Write-Host "  - FAILED to copy $name`: $($_.Exception.Message)" -ForegroundColor Red
+        $deploymentFailed = $true
     }
 }
 
 # Verify deployment
 Write-Host "`nVerifying deployment..." -ForegroundColor Green
-$allRequiredFiles = $pluginFiles + ($dependencyFiles | ForEach-Object { $_.Name })
+$allRequiredFiles = $pluginFiles
 $allFilesPresent = $true
 
 foreach ($file in $allRequiredFiles) {
@@ -328,7 +307,7 @@ if ($allFilesPresent -and -not $deploymentFailed) {
         Write-Host "`nNext steps:" -ForegroundColor Yellow
         Write-Host "  1. Start XRM ToolBox" -ForegroundColor White
         Write-Host "  2. Connect to your environment" -ForegroundColor White
-        Write-Host "  3. Look for 'My XrmToolBox Plugin' in Tools menu" -ForegroundColor White
+        Write-Host "  3. Look for 'Panopticon Audit History Search' in Tools menu" -ForegroundColor White
     }
 
     exit 0

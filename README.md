@@ -1,151 +1,108 @@
-# My XrmToolBox Plugin
+# Panopticon Audit History Search
 
-> **This project was created from the [XrmToolBox Plugin Template](https://github.com/HurleySk/XrmToolBox-Plugin-Template).**
+An XrmToolBox plugin for searching Dataverse audit history across many tables at once.
 
-TODO: Describe what your plugin does.
+Dataverse makes audit data hard to interrogate. The Audit Summary view only sorts by Changed Date, its Record filter does not work, and Microsoft does not support exporting audit logs at all - the SDK is the only way out. Answering "who set this field to X, and when?" across a table normally means hand-writing FetchXML and a detail-fetch loop.
 
-## Getting Started (Template Setup)
-
-After creating your repository from this template:
-
-### 1. Find and Replace
-
-Do a global find-and-replace across all files for these tokens (in this order):
-
-| Token | Replace with | Example |
-|-------|-------------|---------|
-| `MyXrmToolBoxPlugin` | Your full project name | `AttributeExporterXrmToolBoxPlugin` |
-| `My XrmToolBox Plugin` | Display name shown in XrmToolBox | `Attribute Metadata Exporter` |
-| `MyPlugin` | Your plugin class prefix | `AttributeExporter` |
-| `YOUR_GITHUB_USERNAME` | Your GitHub username | `HurleySk` |
-| `YOUR_NAME` | Your name | `Samuel Hurley` |
-| `YOUR_COMPANY` | Your company name | `Procentrix` |
-
-### 2. Rename Files
-
-Rename these files to match your plugin name:
-
-- `MyXrmToolBoxPlugin.sln` -> `YourPluginName.sln`
-- `MyXrmToolBoxPlugin.csproj` -> `YourPluginName.csproj`
-- `MyPluginPlugin.cs` -> `YourPrefixPlugin.cs`
-- `MyPluginControl.cs` -> `YourPrefixControl.cs`
-- `MyPluginControl.Designer.cs` -> `YourPrefixControl.Designer.cs`
-- `MyPluginControl.resx` -> `YourPrefixControl.resx`
-
-### 3. Replace Icons
-
-Replace the placeholder PNGs in `Resources/` with your own icons:
-
-- `icon-128.png` (128x128) - NuGet package icon
-- `icon-80.png` (80x80) - Large icon in XrmToolBox
-- `icon-32.png` (32x32) - Small icon in XrmToolBox
-
-Then update the base64 strings in your plugin entry point file:
-
-```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("Resources\icon-32.png"))
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("Resources\icon-80.png"))
-```
-
-### 4. Generate a New GUID
-
-Replace the placeholder GUID in `Properties/AssemblyInfo.cs`:
-
-```powershell
-[guid]::NewGuid().ToString()
-```
-
-### 5. Update the .sln File
-
-Update the project reference in the `.sln` file to point to your renamed `.csproj` file. Alternatively, delete the `.sln` and regenerate it in Visual Studio.
-
-### 6. Clean Up This Section
-
-Delete this "Getting Started" section from the README once you're done setting up.
-
----
+Panopticon syncs audit metadata into a local SQLite cache, then searches it instantly, pulling old and new values on demand.
 
 ## Features
 
-- TODO: List your plugin features
+- **Multi-table search** - select any number of audit-enabled tables and get one merged result grid.
+- **Filter by changed field** - "show me every change to `statecode`" resolved locally, without a single value-fetch call.
+- **Preflight cost estimate** - see row count, disk size and expected duration before syncing, with automatic sampling when the range is too large to count exactly.
+- **Record timeline** - double-click any row for that record's full change history.
+- **CSV export** - metadata-only, or with old/new values behind a cost gate. Opens straight into Excel.
+- **Resumable sync** - cancel any time; completed monthly windows are kept and skipped on the next run.
+- **Service protection aware** - honours `Retry-After` on 429 and backs off rather than failing.
+
+## How it works
+
+Dataverse exposes audit data through two very different doors, and the split drives the whole design:
+
+| | Audit table query | `RetrieveAuditDetails` |
+|---|---|---|
+| Returns | who, when, which table, which record, which fields changed | old and new values |
+| Cost | 5,000 rows per request | one request **per audit row** |
+| Practical throughput | ~1-5 min per million rows | ~1-2k rows per minute |
+
+So Panopticon caches the first tier and never bulk-caches the second. The `attributemask` column - a CSV of `AttributeMetadata.ColumnNumber` - is exploded into an indexed table at sync time, which is what makes field-level filtering an index seek instead of a table scan.
+
+### Cache
+
+One SQLite database per environment, under:
+
+```
+%APPDATA%\MscrmTools\XrmToolBox\Panopticon\<organization>.db
+```
+
+Roughly 400 bytes per audit row, so ~400 MB per million rows. Its size is shown in the toolbar and **Purge cache** deletes it.
+
+Panopticon defaults to **the last 30 days** and refuses an open-ended range. Widening past 90 days prompts you to estimate first; past 365 days requires explicit confirmation.
+
+## Requirements
+
+- Windows, [XrmToolBox](https://www.xrmtoolbox.com/), .NET Framework 4.8
+- Dataverse privileges: **View Audit Summary** (`prvReadAuditSummary`) and **View Audit History** (`prvReadRecordAuditHistory`). Panopticon probes for both on connect and tells you which one is missing.
+
+No native SQLite binary is deployed - the plugin binds to `winsqlite3.dll`, which ships with Windows.
 
 ## Installation
 
-### From XRM ToolBox Tool Store (Recommended)
-1. Open XRM ToolBox
-2. Open Tool Library (Ctrl+T)
-3. Search for "My XrmToolBox Plugin"
-4. Click Install and restart
+### Tool Library
 
-### Manual Installation
-1. Build the project: `dotnet build --configuration Release`
-2. Run `.\deploy.ps1 -Force` to deploy to XRM ToolBox
+1. Open XrmToolBox, press `Ctrl+T`
+2. Search for **Panopticon Audit History Search**
+3. Install and restart
+
+### From source
+
+```bash
+git clone https://github.com/HurleySk/PanopticonAuditHistorySearch.git
+cd PanopticonAuditHistorySearch
+dotnet build --configuration Release
+.\deploy.ps1 -Force
+```
+
+`deploy.ps1` closes XrmToolBox, builds, deploys, clears the manifest cache, and relaunches.
 
 ## Usage
 
-TODO: Describe how to use your plugin.
+1. Connect to an environment. Panopticon checks audit access and loads the audit-enabled tables.
+2. Check the tables you care about. The range starts at the last 30 days.
+3. **Estimate cost** if you widened the range, then **Sync audit data**.
+4. Filter by user, event, operation, record name, or changed field, and hit **Search cache**.
+5. Select a row to load its old and new values; double-click for the record's full timeline.
+6. **Export CSV** when you have what you need.
 
-## Building from Source
+Re-syncing the same scope is cheap - completed monthly windows are skipped. Tick **Force refresh** to re-pull them.
+
+## Known limits
+
+These are Dataverse constraints, not plugin bugs:
+
+- Audit data is **not available through the TDS/SQL endpoint**, so SQL 4 CDS cannot query it directly.
+- The audit table joins only to `systemuser`, so record and table names are resolved client-side, lazily, for visible rows.
+- Values over 5 KB are truncated by the platform. Panopticon flags truncated values rather than presenting them as complete.
+- Exact row counts fail above the 50,000 aggregate limit; the estimate falls back to sampling and says so.
+- `attributemask` is documented as internal. Panopticon validates the mapping against a real audit row on connect and disables field filtering with a clear message if it does not line up.
+- Results are capped at 250,000 rows in the grid. The full match count is still reported.
+
+## Building
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/MyXrmToolBoxPlugin.git
-cd MyXrmToolBoxPlugin
 dotnet build --configuration Release
-```
-
-### Testing Locally
-
-1. Build and deploy the plugin:
-   ```powershell
-   .\deploy.ps1 -Force
-   ```
-2. Open (or restart) XRM ToolBox
-3. If your plugin doesn't appear, delete the manifest cache and restart:
-   ```
-   %APPDATA%\MscrmTools\XrmToolBox\Plugins\manifest.json
-   ```
-4. Find your plugin in the tool list and open it
-5. Connect to a Dataverse environment using the connection button in the toolbar
-6. Test your plugin's functionality
-
-**Tip:** During development, use `.\deploy.ps1 -Force` to automatically close XRM ToolBox, rebuild, deploy, and relaunch in one step.
-
-Deploy script options:
-- `-SkipBuild` - Skip the build step and use existing binaries
-- `-Force` - Close XRM ToolBox automatically if running
-- `-WhatIf` - Show what would happen without making changes
-
-### Create NuGet Package
-
-```bash
 dotnet pack --configuration Release
 ```
 
-### Publish to NuGet
-
-```bash
-dotnet nuget push bin\Release\MyXrmToolBoxPlugin.1.0.0.0.nupkg --api-key YOUR_API_KEY --source https://api.nuget.org/v3/index.json
-```
-
-## Troubleshooting
-
-**Plugin not appearing in XRM ToolBox:**
-Delete `%APPDATA%\MscrmTools\XrmToolBox\Plugins\manifest.json` and restart XRM ToolBox.
-
-**"Object reference" or missing assembly errors:**
-Make sure all dependency DLLs are deployed alongside the plugin DLL. Re-run `.\deploy.ps1`.
-
-**"Could not load file or assembly" errors:**
-If your plugin uses additional NuGet packages, make sure to:
-1. Add their DLLs to `$pluginFiles` in `deploy.ps1`
-2. Add `<None Include="$(OutputPath)\YourDependency.dll" Pack="true" PackagePath="Plugins\" />` to the `.csproj`
+The main DLL packs to `Plugins/`; SQLite dependencies pack to `Plugins/Dependencies/`. Both the NuGet package and `deploy.ps1` must keep dependencies in that subfolder: XrmToolBox treats every DLL at the root of `Plugins/` as a candidate tool, so a dependency left there is reported under "Tools not loaded" at startup, and the Tool Store validator separately rejects it for not matching the package version.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT - see [LICENSE](LICENSE).
 
 ## Author
 
-**YOUR_NAME** - [YOUR_GITHUB_USERNAME](https://github.com/YOUR_GITHUB_USERNAME)
+**Samuel Hurley** - [HurleySk](https://github.com/HurleySk)
 
-Built on [XRM ToolBox](https://www.xrmtoolbox.com/) by Tanguy Touzard.
+Built on [XrmToolBox](https://www.xrmtoolbox.com/) by Tanguy Touzard.

@@ -1,6 +1,6 @@
-# Build Script for My XrmToolBox Plugin
+# Build Script for Panopticon Audit History Search
 
-Write-Host "`nBuilding My XrmToolBox Plugin..." -ForegroundColor Cyan
+Write-Host "`nBuilding Panopticon Audit History Search..." -ForegroundColor Cyan
 Write-Host "`nRestoring NuGet packages..." -ForegroundColor Green
 dotnet restore
 
