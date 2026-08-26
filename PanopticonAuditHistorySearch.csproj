@@ -11,9 +11,9 @@
     <AssemblyName>PanopticonAuditHistorySearch</AssemblyName>
     <RootNamespace>PanopticonAuditHistorySearch</RootNamespace>
     <Title>Panopticon Audit History Search</Title>
-    <Version>0.1.0.2</Version>
+    <Version>0.1.0.3</Version>
     <Authors>Samuel Hurley</Authors>
-    <Company>Procentrix</Company>
+    <Company>Sam Hurley</Company>
     <Copyright>Copyright (c) Samuel Hurley 2026</Copyright>
     <Description>Search Dataverse audit history across multiple tables. Syncs audit metadata to a local SQLite cache for instant filtering by table, user, event, date and changed field, then fetches old/new values on demand.</Description>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>

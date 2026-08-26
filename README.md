@@ -2,7 +2,7 @@
 
 An XrmToolBox plugin for searching Dataverse audit history across many tables at once.
 
-> **0.1.0.2 - alpha.** Feature-complete against the v1 scope and verified for build, packaging, plugin load and cache/search behaviour, but not yet exercised end to end against a live Dataverse org. Expect rough edges, and treat the cache format as unstable.
+> **0.1.0.3 - alpha.** Feature-complete against the v1 scope and verified for build, packaging, plugin load and cache/search behaviour, but not yet exercised end to end against a live Dataverse org. Expect rough edges, and treat the cache format as unstable.
 
 Dataverse makes audit data hard to interrogate. The Audit Summary view only sorts by Changed Date, its Record filter does not work, and Microsoft does not support exporting audit logs at all - the SDK is the only way out. Answering "who set this field to X, and when?" across a table normally means hand-writing FetchXML and a detail-fetch loop.
 
@@ -105,7 +105,7 @@ The trust lives on nuget.org, not here: under your username > **Trusted Publishi
 Then bump `<Version>` in the csproj and `AssemblyVersion`/`AssemblyFileVersion` in `Properties/AssemblyInfo.cs` to the same 4-part value, and tag:
 
 ```bash
-git tag v0.1.0.3 && git push --tags
+git tag v0.1.0.4 && git push --tags
 ```
 
 The workflow refuses to publish unless the tag, the csproj version and the built assembly version all agree, and unless exactly one DLL sits at the root of `Plugins/`. Run it from the Actions tab with **dry run** ticked to build and inspect the package without pushing.
