@@ -96,7 +96,9 @@ XrmToolBox applies no binding redirects to plugin assemblies, so `SQLitePCLRaw.b
 
 ## Releasing
 
-Publishing runs from `.github/workflows/release.yml`. Add a repository secret named `NUGET_API_KEY` (Settings > Secrets and variables > Actions) whose key has the **Push new packages and package versions** scope and a `*` glob pattern - a narrower glob fails for a package that does not exist on nuget.org yet.
+Publishing runs from `.github/workflows/release.yml` and uses [trusted publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing), so there is no API key to store or rotate. The job requests a GitHub OIDC token, `NuGet/login@v1` exchanges it with nuget.org for a key that lives one hour, and that key pushes the package.
+
+The trust lives on nuget.org, not here: under your username > **Trusted Publishing**, add a policy with repository owner `HurleySk`, repository `PanopticonAuditHistorySearch`, workflow file `release.yml` (file name only) and no environment. A policy is scoped to a nuget.org *owner*, so it authorises every package that owner holds, not just this one.
 
 Then bump `<Version>` in the csproj and `AssemblyVersion`/`AssemblyFileVersion` in `Properties/AssemblyInfo.cs` to the same 4-part value, and tag:
 
