@@ -96,6 +96,14 @@ jobs:
 
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create ${{ github.ref_name }} bin/Release/*.nupkg --title ${{ github.ref_name }} --generate-notes
+          TAG: ${{ github.ref_name }}
+        run: |
+          pkg=$(ls bin/Release/*.nupkg | head -1)
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "$pkg" --clobber
+          else
+            gh release create "$TAG" "$pkg" --title "$TAG" --generate-notes
+          fi
