@@ -11,7 +11,7 @@
     <AssemblyName>PanopticonAuditHistorySearch</AssemblyName>
     <RootNamespace>PanopticonAuditHistorySearch</RootNamespace>
     <Title>Panopticon Audit History Search</Title>
-    <Version>0.1.0-alpha.1</Version>
+    <Version>0.1.0.1</Version>
     <Authors>Samuel Hurley</Authors>
     <Company>Procentrix</Company>
     <Copyright>Copyright (c) Samuel Hurley 2026</Copyright>
@@ -23,9 +23,10 @@
 
     <PackageProjectUrl>https://github.com/HurleySk/PanopticonAuditHistorySearch</PackageProjectUrl>
     <PackageIcon>icon-128.png</PackageIcon>
+    <PackageIconUrl>https://raw.githubusercontent.com/HurleySk/PanopticonAuditHistorySearch/main/Resources/icon-128.png</PackageIconUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>XrmToolBox;Dynamics365;Dataverse;PowerPlatform;Audit</PackageTags>
-    <PackageReleaseNotes>First alpha. Feature-complete against the v1 scope but not yet exercised against a live Dataverse org.</PackageReleaseNotes>
+    <PackageReleaseNotes>First alpha (0.x: unstable, cache format may change). Feature-complete against the v1 scope but not yet exercised against a live Dataverse org.</PackageReleaseNotes>
     <RepositoryUrl>https://github.com/HurleySk/PanopticonAuditHistorySearch</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

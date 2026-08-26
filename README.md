@@ -2,7 +2,7 @@
 
 An XrmToolBox plugin for searching Dataverse audit history across many tables at once.
 
-> **0.1.0-alpha.1.** Feature-complete against the v1 scope and verified for build, packaging, plugin load and cache/search behaviour, but not yet exercised end to end against a live Dataverse org. Expect rough edges, and treat the cache format as unstable.
+> **0.1.0.1 - alpha.** Feature-complete against the v1 scope and verified for build, packaging, plugin load and cache/search behaviour, but not yet exercised end to end against a live Dataverse org. Expect rough edges, and treat the cache format as unstable.
 
 Dataverse makes audit data hard to interrogate. The Audit Summary view only sorts by Changed Date, its Record filter does not work, and Microsoft does not support exporting audit logs at all - the SDK is the only way out. Answering "who set this field to X, and when?" across a table normally means hand-writing FetchXML and a detail-fetch loop.
 
