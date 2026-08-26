@@ -1,5 +1,5 @@
 # XRM ToolBox Plugin Build & Deploy Script
-# Builds and deploys your plugin to XRM ToolBox
+# Builds and deploys Panopticon Audit History Search to XrmToolBox
 
 param(
     [switch]$SkipBuild,

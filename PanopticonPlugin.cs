@@ -1,11 +1,3 @@
-// =============================================================================
-// XrmToolBox Plugin Entry Point
-//
-// To update the icon base64 strings after replacing the PNGs, run in PowerShell:
-//   [Convert]::ToBase64String([IO.File]::ReadAllBytes("Resources\icon-32.png"))
-//   [Convert]::ToBase64String([IO.File]::ReadAllBytes("Resources\icon-80.png"))
-// =============================================================================
-
 using System.ComponentModel.Composition;
 using XrmToolBox.Extensibility;
 using XrmToolBox.Extensibility.Interfaces;
@@ -23,8 +15,6 @@ namespace PanopticonAuditHistorySearch
     [ExportMetadata("IsOpenSource", true)]
     public class PanopticonPlugin : PluginBase, IGitHubPlugin
     {
-        // IGitHubPlugin: links your plugin to its GitHub repository.
-        // Remove IGitHubPlugin (and these properties) if not hosting on GitHub.
         public string RepositoryName => "PanopticonAuditHistorySearch";
         public string UserName => "HurleySk";
 

@@ -49,13 +49,7 @@ No native SQLite binary is deployed - the plugin binds to `winsqlite3.dll`, whic
 
 ## Installation
 
-### Tool Library
-
-1. Open XrmToolBox, press `Ctrl+T`
-2. Search for **Panopticon Audit History Search**
-3. Install and restart
-
-### From source
+Not published to the XrmToolBox Tool Library yet, so build and deploy it yourself:
 
 ```bash
 git clone https://github.com/HurleySk/PanopticonAuditHistorySearch.git
@@ -64,7 +58,7 @@ dotnet build --configuration Release
 .\deploy.ps1 -Force
 ```
 
-`deploy.ps1` closes XrmToolBox, builds, deploys, clears the manifest cache, and relaunches.
+`deploy.ps1` closes XrmToolBox, builds, copies the plugin to `%APPDATA%\MscrmTools\XrmToolBox\Plugins`, clears the manifest cache so the tool is rescanned, and relaunches.
 
 ## Usage
 
@@ -88,10 +82,9 @@ These are Dataverse constraints, not plugin bugs:
 - `attributemask` is documented as internal. Panopticon validates the mapping against a real audit row on connect and disables field filtering with a clear message if it does not line up.
 - Results are capped at 250,000 rows in the grid. The full match count is still reported.
 
-## Building
+## Packaging
 
 ```bash
-dotnet build --configuration Release
 dotnet pack --configuration Release
 ```
 
