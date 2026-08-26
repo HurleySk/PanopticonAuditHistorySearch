@@ -97,6 +97,8 @@ dotnet pack --configuration Release
 
 The main DLL packs to `Plugins/`; SQLite dependencies pack to `Plugins/Dependencies/`. Both the NuGet package and `deploy.ps1` must keep dependencies in that subfolder: XrmToolBox treats every DLL at the root of `Plugins/` as a candidate tool, so a dependency left there is reported under "Tools not loaded" at startup, and the Tool Store validator separately rejects it for not matching the package version.
 
+XrmToolBox applies no binding redirects to plugin assemblies, so `SQLitePCLRaw.bundle_winsqlite3` is pinned to the exact version `Microsoft.Data.Sqlite` references (2.1.6.2060 for 8.0.10). A newer bundle builds and passes tests - the test host generates redirects - then fails at runtime inside XrmToolBox with a `FileNotFoundException` on `SQLitePCLRaw.core`. Bump both together or not at all.
+
 ## License
 
 MIT - see [LICENSE](LICENSE).
