@@ -18,150 +18,171 @@ namespace PanopticonAuditHistorySearch.Services
 
         public SearchResult Run(SearchCriteria criteria)
         {
-            var where = new WhereClause(criteria);
-
-            var total = Count(where);
-            var capped = Math.Min(total, AuditCache.MaxMaterializedResults);
-
-            Exec("DROP TABLE IF EXISTS temp.result_set");
-            Exec("CREATE TABLE temp.result_set(position INTEGER PRIMARY KEY, auditid BLOB NOT NULL)");
-
-            using (var cmd = _cache.Connection.CreateCommand())
+            lock (_cache.Gate)
             {
-                cmd.CommandText =
-                    "INSERT INTO temp.result_set(auditid) SELECT a.auditid FROM audit a " +
-                    where.Sql + " ORDER BY a.created_on DESC, a.auditid LIMIT " + AuditCache.MaxMaterializedResults;
-                where.Bind(cmd);
-                cmd.ExecuteNonQuery();
+                var where = new WhereClause(criteria);
+
+                var total = Count(where);
+                var capped = Math.Min(total, AuditCache.MaxMaterializedResults);
+
+                Exec("DROP TABLE IF EXISTS temp.result_set");
+                Exec("CREATE TABLE temp.result_set(position INTEGER PRIMARY KEY, auditid BLOB NOT NULL)");
+
+                using (var cmd = _cache.Connection.CreateCommand())
+                {
+                    cmd.CommandText =
+                        "INSERT INTO temp.result_set(auditid) SELECT a.auditid FROM audit a " +
+                        where.Sql + " ORDER BY a.created_on DESC, a.auditid LIMIT " + AuditCache.MaxMaterializedResults;
+                    where.Bind(cmd);
+                    cmd.ExecuteNonQuery();
+                }
+
+                return new SearchResult
+                {
+                    TotalMatched = total,
+                    Available = capped,
+                    Truncated = total > capped
+                };
             }
-
-            return new SearchResult
-            {
-                TotalMatched = total,
-                Available = capped,
-                Truncated = total > capped
-            };
         }
 
         public IList<AuditRow> Page(int startIndex, int count)
         {
-            var rows = new List<AuditRow>(count);
-            using (var cmd = _cache.Connection.CreateCommand())
+            lock (_cache.Gate)
             {
-                cmd.CommandText = @"
-SELECT a.auditid, a.created_on, a.otc, a.object_id, a.user_id, a.calling_user_id,
-       a.action, a.operation, a.transaction_id, a.attribute_mask,
-       e.logical_name, e.display_name, p.name, o.name
-FROM temp.result_set r
-JOIN audit a ON a.auditid = r.auditid
-LEFT JOIN entity e ON e.otc = a.otc
-LEFT JOIN principal p ON p.id = a.user_id
-LEFT JOIN object_name o ON o.otc = a.otc AND o.object_id = a.object_id
-WHERE r.position > $from AND r.position <= $to
-ORDER BY r.position";
-                cmd.Parameters.AddWithValue("$from", startIndex);
-                cmd.Parameters.AddWithValue("$to", startIndex + count);
-
-                using (var reader = cmd.ExecuteReader())
+                var rows = new List<AuditRow>(count);
+                using (var cmd = _cache.Connection.CreateCommand())
                 {
-                    while (reader.Read()) rows.Add(ReadRow(reader));
-                }
-            }
+                    cmd.CommandText = @"
+    SELECT a.auditid, a.created_on, a.otc, a.object_id, a.user_id, a.calling_user_id,
+           a.action, a.operation, a.transaction_id, a.attribute_mask,
+           e.logical_name, e.display_name, p.name, o.name
+    FROM temp.result_set r
+    JOIN audit a ON a.auditid = r.auditid
+    LEFT JOIN entity e ON e.otc = a.otc
+    LEFT JOIN principal p ON p.id = a.user_id
+    LEFT JOIN object_name o ON o.otc = a.otc AND o.object_id = a.object_id
+    WHERE r.position > $from AND r.position <= $to
+    ORDER BY r.position";
+                    cmd.Parameters.AddWithValue("$from", startIndex);
+                    cmd.Parameters.AddWithValue("$to", startIndex + count);
 
-            AttachChangedFields(rows);
-            return rows;
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read()) rows.Add(ReadRow(reader));
+                    }
+                }
+
+                AttachChangedFields(rows);
+                return rows;
+            }
         }
 
         public IList<AuditRow> All(int limit)
         {
-            var rows = new List<AuditRow>();
-            var batch = 5000;
-            for (var start = 0; start < limit; start += batch)
+            lock (_cache.Gate)
             {
-                var page = Page(start, Math.Min(batch, limit - start));
-                if (page.Count == 0) break;
-                rows.AddRange(page);
+                var rows = new List<AuditRow>();
+                var batch = 5000;
+                for (var start = 0; start < limit; start += batch)
+                {
+                    var page = Page(start, Math.Min(batch, limit - start));
+                    if (page.Count == 0) break;
+                    rows.AddRange(page);
+                }
+                return rows;
             }
-            return rows;
         }
 
         public IList<Guid> UnresolvedUserIds(int limit)
         {
-            return ReadGuids(@"
-SELECT DISTINCT a.user_id FROM temp.result_set r
-JOIN audit a ON a.auditid = r.auditid
-LEFT JOIN principal p ON p.id = a.user_id
-WHERE a.user_id IS NOT NULL AND p.id IS NULL
-LIMIT " + limit);
+            lock (_cache.Gate)
+            {
+                return ReadGuids(@"
+    SELECT DISTINCT a.user_id FROM temp.result_set r
+    JOIN audit a ON a.auditid = r.auditid
+    LEFT JOIN principal p ON p.id = a.user_id
+    WHERE a.user_id IS NOT NULL AND p.id IS NULL
+    LIMIT " + limit);
+            }
         }
 
         public IDictionary<int, IList<Guid>> UnresolvedObjectIds(int startIndex, int count)
         {
-            var result = new Dictionary<int, IList<Guid>>();
-            using (var cmd = _cache.Connection.CreateCommand())
+            lock (_cache.Gate)
             {
-                cmd.CommandText = @"
-SELECT DISTINCT a.otc, a.object_id FROM temp.result_set r
-JOIN audit a ON a.auditid = r.auditid
-LEFT JOIN object_name o ON o.otc = a.otc AND o.object_id = a.object_id
-WHERE r.position > $from AND r.position <= $to
-  AND a.object_id IS NOT NULL AND o.object_id IS NULL";
-                cmd.Parameters.AddWithValue("$from", startIndex);
-                cmd.Parameters.AddWithValue("$to", startIndex + count);
-                using (var reader = cmd.ExecuteReader())
+                var result = new Dictionary<int, IList<Guid>>();
+                using (var cmd = _cache.Connection.CreateCommand())
                 {
-                    while (reader.Read())
+                    cmd.CommandText = @"
+    SELECT DISTINCT a.otc, a.object_id FROM temp.result_set r
+    JOIN audit a ON a.auditid = r.auditid
+    LEFT JOIN object_name o ON o.otc = a.otc AND o.object_id = a.object_id
+    WHERE r.position > $from AND r.position <= $to
+      AND a.object_id IS NOT NULL AND o.object_id IS NULL";
+                    cmd.Parameters.AddWithValue("$from", startIndex);
+                    cmd.Parameters.AddWithValue("$to", startIndex + count);
+                    using (var reader = cmd.ExecuteReader())
                     {
-                        var otc = reader.GetInt32(0);
-                        IList<Guid> list;
-                        if (!result.TryGetValue(otc, out list))
+                        while (reader.Read())
                         {
-                            list = new List<Guid>();
-                            result[otc] = list;
+                            var otc = reader.GetInt32(0);
+                            IList<Guid> list;
+                            if (!result.TryGetValue(otc, out list))
+                            {
+                                list = new List<Guid>();
+                                result[otc] = list;
+                            }
+                            list.Add(ReadGuid(reader, 1).Value);
                         }
-                        list.Add(ReadGuid(reader, 1).Value);
                     }
                 }
+                return result;
             }
-            return result;
         }
 
         public IList<Guid> AuditIdsWithoutDetails(int startIndex, int count)
         {
-            return ReadGuids(string.Format(@"
-SELECT r.auditid FROM temp.result_set r
-LEFT JOIN audit_detail d ON d.auditid = r.auditid
-WHERE r.position > {0} AND r.position <= {1} AND d.auditid IS NULL
-ORDER BY r.position", startIndex, startIndex + count));
+            lock (_cache.Gate)
+            {
+                return ReadGuids(string.Format(@"
+    SELECT r.auditid FROM temp.result_set r
+    LEFT JOIN audit_detail d ON d.auditid = r.auditid
+    WHERE r.position > {0} AND r.position <= {1} AND d.auditid IS NULL
+    ORDER BY r.position", startIndex, startIndex + count));
+            }
         }
 
         public IList<FacetValue> UserFacet(SearchCriteria criteria)
         {
-            var where = new WhereClause(criteria);
-            var facets = new List<FacetValue>();
-            using (var cmd = _cache.Connection.CreateCommand())
+            lock (_cache.Gate)
             {
-                cmd.CommandText =
-                    "SELECT a.user_id, COALESCE(p.name, '(unresolved)'), COUNT(*) FROM audit a " +
-                    "LEFT JOIN principal p ON p.id = a.user_id " + where.Sql +
-                    " GROUP BY a.user_id ORDER BY COUNT(*) DESC LIMIT 200";
-                where.Bind(cmd);
-                using (var reader = cmd.ExecuteReader())
+                var where = new WhereClause(criteria);
+                var facets = new List<FacetValue>();
+                using (var cmd = _cache.Connection.CreateCommand())
                 {
-                    while (reader.Read())
+                    cmd.CommandText =
+                        "SELECT a.user_id, COALESCE(p.name, '(unresolved)'), COUNT(*) FROM audit a " +
+                        "LEFT JOIN principal p ON p.id = a.user_id " + where.Sql +
+                        " GROUP BY a.user_id ORDER BY COUNT(*) DESC LIMIT 200";
+                    where.Bind(cmd);
+                    using (var reader = cmd.ExecuteReader())
                     {
-                        var id = ReadGuid(reader, 0);
-                        if (!id.HasValue) continue;
-                        facets.Add(new FacetValue
+                        while (reader.Read())
                         {
-                            Key = id.Value,
-                            Label = reader.GetString(1),
-                            Count = reader.GetInt64(2)
-                        });
+                            var id = ReadGuid(reader, 0);
+                            if (!id.HasValue) continue;
+                            facets.Add(new FacetValue
+                            {
+                                Key = id.Value,
+                                Label = reader.GetString(1),
+                                Count = reader.GetInt64(2)
+                            });
+                        }
                     }
                 }
+                return facets;
             }
-            return facets;
         }
 
         private long Count(WhereClause where)

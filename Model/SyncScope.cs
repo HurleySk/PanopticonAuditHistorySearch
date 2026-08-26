@@ -46,15 +46,27 @@ namespace PanopticonAuditHistorySearch.Model
             return null;
         }
 
+        public int EffectiveSpanDays
+        {
+            get { return (int)Math.Ceiling((EffectiveToUtc - EffectiveFromUtc).TotalDays); }
+        }
+
+        public DateTime EffectiveFromUtc { get { return MonthStart(FromUtc); } }
+        public DateTime EffectiveToUtc { get { return MonthStart(ToUtc).AddMonths(1); } }
+
+        private static DateTime MonthStart(DateTime value)
+        {
+            return new DateTime(value.Year, value.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        }
+
         public IEnumerable<DateRange> MonthlyWindows()
         {
-            var cursor = FromUtc;
-            while (cursor < ToUtc)
+            var cursor = EffectiveFromUtc;
+            var end = EffectiveToUtc;
+            while (cursor < end)
             {
-                var next = cursor.AddMonths(1);
-                if (next > ToUtc) next = ToUtc;
-                yield return new DateRange { FromUtc = cursor, ToUtc = next };
-                cursor = next;
+                yield return new DateRange { FromUtc = cursor, ToUtc = cursor.AddMonths(1) };
+                cursor = cursor.AddMonths(1);
             }
         }
 

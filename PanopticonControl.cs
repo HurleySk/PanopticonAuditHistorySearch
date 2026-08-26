@@ -37,6 +37,7 @@ namespace PanopticonAuditHistorySearch
         private IList<EntityDescriptor> _allEntities = new List<EntityDescriptor>();
         private readonly HashSet<string> _checkedEntities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private CancellationTokenSource _cancellation;
+        private readonly CancellationTokenSource _ambient = new CancellationTokenSource();
 
         private SearchResult _result = new SearchResult();
         private List<AuditRow> _window = new List<AuditRow>();
@@ -71,6 +72,8 @@ namespace PanopticonAuditHistorySearch
         public override void ClosingPlugin(PluginCloseInfo info)
         {
             CancelWork();
+            try { _ambient.Cancel(); }
+            catch (ObjectDisposedException) { }
             TearDownCache();
             base.ClosingPlugin(info);
         }
@@ -629,7 +632,7 @@ namespace PanopticonAuditHistorySearch
             var users = _search.UnresolvedUserIds(200);
             if (pending.Count == 0 && users.Count == 0) return;
 
-            var token = _cancellation == null ? CancellationToken.None : _cancellation.Token;
+            var token = _ambient.Token;
 
             Task.Run(() =>
             {
@@ -688,7 +691,7 @@ namespace PanopticonAuditHistorySearch
             gridDetail.DataSource = null;
 
             var auditId = row.AuditId;
-            var token = _cancellation == null ? CancellationToken.None : _cancellation.Token;
+            var token = _ambient.Token;
 
             Task.Run(() =>
             {

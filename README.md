@@ -94,6 +94,18 @@ The main DLL packs to `Plugins/`; SQLite dependencies pack to `Plugins/Dependenc
 
 XrmToolBox applies no binding redirects to plugin assemblies, so `SQLitePCLRaw.bundle_winsqlite3` is pinned to the exact version `Microsoft.Data.Sqlite` references (2.1.6.2060 for 8.0.10). A newer bundle builds and passes tests - the test host generates redirects - then fails at runtime inside XrmToolBox with a `FileNotFoundException` on `SQLitePCLRaw.core`. Bump both together or not at all.
 
+## Releasing
+
+Publishing runs from `.github/workflows/release.yml`. Add a repository secret named `NUGET_API_KEY` (Settings > Secrets and variables > Actions) whose key has the **Push new packages and package versions** scope and a `*` glob pattern - a narrower glob fails for a package that does not exist on nuget.org yet.
+
+Then bump `<Version>` in the csproj and `AssemblyVersion`/`AssemblyFileVersion` in `Properties/AssemblyInfo.cs` to the same 4-part value, and tag:
+
+```bash
+git tag v0.1.0.2 && git push --tags
+```
+
+The workflow refuses to publish unless the tag, the csproj version and the built assembly version all agree, and unless exactly one DLL sits at the root of `Plugins/`. Run it from the Actions tab with **dry run** ticked to build and inspect the package without pushing.
+
 ## License
 
 MIT - see [LICENSE](LICENSE).

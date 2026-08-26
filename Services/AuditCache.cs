@@ -11,6 +11,9 @@ namespace PanopticonAuditHistorySearch.Services
         private static readonly DateTime Epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         private readonly SqliteConnection _connection;
+        private readonly object _gate = new object();
+
+        public object Gate { get { return _gate; } }
 
         public string DatabasePath { get; private set; }
 
@@ -58,7 +61,8 @@ CREATE INDEX IF NOT EXISTS ix_audit_otc_date ON audit(otc, created_on DESC);
 CREATE INDEX IF NOT EXISTS ix_audit_user_date ON audit(user_id, created_on DESC);
 CREATE INDEX IF NOT EXISTS ix_audit_object ON audit(object_id);
 CREATE INDEX IF NOT EXISTS ix_audit_txn ON audit(transaction_id);
-CREATE UNIQUE INDEX IF NOT EXISTS ix_field ON audit_field(column_number, auditid);");
+CREATE UNIQUE INDEX IF NOT EXISTS ix_field ON audit_field(column_number, auditid);
+CREATE INDEX IF NOT EXISTS ix_field_audit ON audit_field(auditid);");
         }
 
         public static long ToUnix(DateTime utc)
@@ -73,123 +77,132 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_field ON audit_field(column_number, auditid
 
         public void SaveEntities(IEnumerable<EntityScope> entities)
         {
-            using (var tx = _connection.BeginTransaction())
-            using (var cmd = _connection.CreateCommand())
+            lock (Gate)
             {
-                cmd.Transaction = tx;
-                cmd.CommandText =
-                    "INSERT INTO entity(otc, logical_name, display_name) VALUES($o,$l,$d) " +
-                    "ON CONFLICT(otc) DO UPDATE SET logical_name=$l, display_name=$d";
-                var o = cmd.Parameters.Add("$o", SqliteType.Integer);
-                var l = cmd.Parameters.Add("$l", SqliteType.Text);
-                var d = cmd.Parameters.Add("$d", SqliteType.Text);
-                foreach (var e in entities)
+                using (var tx = _connection.BeginTransaction())
+                using (var cmd = _connection.CreateCommand())
                 {
-                    o.Value = e.ObjectTypeCode;
-                    l.Value = e.LogicalName;
-                    d.Value = (object)e.DisplayName ?? DBNull.Value;
-                    cmd.ExecuteNonQuery();
+                    cmd.Transaction = tx;
+                    cmd.CommandText =
+                        "INSERT INTO entity(otc, logical_name, display_name) VALUES($o,$l,$d) " +
+                        "ON CONFLICT(otc) DO UPDATE SET logical_name=$l, display_name=$d";
+                    var o = cmd.Parameters.Add("$o", SqliteType.Integer);
+                    var l = cmd.Parameters.Add("$l", SqliteType.Text);
+                    var d = cmd.Parameters.Add("$d", SqliteType.Text);
+                    foreach (var e in entities)
+                    {
+                        o.Value = e.ObjectTypeCode;
+                        l.Value = e.LogicalName;
+                        d.Value = (object)e.DisplayName ?? DBNull.Value;
+                        cmd.ExecuteNonQuery();
+                    }
+                    tx.Commit();
                 }
-                tx.Commit();
             }
         }
 
         public void SaveColumns(int objectTypeCode, IEnumerable<ColumnInfo> columns)
         {
-            using (var tx = _connection.BeginTransaction())
-            using (var cmd = _connection.CreateCommand())
+            lock (Gate)
             {
-                cmd.Transaction = tx;
-                cmd.CommandText =
-                    "INSERT INTO attribute(otc, column_number, logical_name, display_name) VALUES($o,$c,$l,$d) " +
-                    "ON CONFLICT(otc, column_number) DO UPDATE SET logical_name=$l, display_name=$d";
-                var o = cmd.Parameters.Add("$o", SqliteType.Integer);
-                var c = cmd.Parameters.Add("$c", SqliteType.Integer);
-                var l = cmd.Parameters.Add("$l", SqliteType.Text);
-                var d = cmd.Parameters.Add("$d", SqliteType.Text);
-                foreach (var column in columns)
+                using (var tx = _connection.BeginTransaction())
+                using (var cmd = _connection.CreateCommand())
                 {
-                    o.Value = objectTypeCode;
-                    c.Value = column.ColumnNumber;
-                    l.Value = column.LogicalName;
-                    d.Value = (object)column.DisplayName ?? DBNull.Value;
-                    cmd.ExecuteNonQuery();
+                    cmd.Transaction = tx;
+                    cmd.CommandText =
+                        "INSERT INTO attribute(otc, column_number, logical_name, display_name) VALUES($o,$c,$l,$d) " +
+                        "ON CONFLICT(otc, column_number) DO UPDATE SET logical_name=$l, display_name=$d";
+                    var o = cmd.Parameters.Add("$o", SqliteType.Integer);
+                    var c = cmd.Parameters.Add("$c", SqliteType.Integer);
+                    var l = cmd.Parameters.Add("$l", SqliteType.Text);
+                    var d = cmd.Parameters.Add("$d", SqliteType.Text);
+                    foreach (var column in columns)
+                    {
+                        o.Value = objectTypeCode;
+                        c.Value = column.ColumnNumber;
+                        l.Value = column.LogicalName;
+                        d.Value = (object)column.DisplayName ?? DBNull.Value;
+                        cmd.ExecuteNonQuery();
+                    }
+                    tx.Commit();
                 }
-                tx.Commit();
             }
         }
 
         public int SaveAuditRows(IList<AuditRow> rows)
         {
-            if (rows.Count == 0) return 0;
-
-            using (var tx = _connection.BeginTransaction())
+            lock (Gate)
             {
-                using (var cmd = _connection.CreateCommand())
+                if (rows.Count == 0) return 0;
+
+                using (var tx = _connection.BeginTransaction())
                 {
-                    cmd.Transaction = tx;
-                    cmd.CommandText =
-                        "INSERT OR REPLACE INTO audit(auditid, created_on, otc, object_id, user_id, " +
-                        "calling_user_id, action, operation, transaction_id, attribute_mask) " +
-                        "VALUES($a,$c,$o,$oi,$u,$cu,$ac,$op,$t,$m)";
-                    var a = cmd.Parameters.Add("$a", SqliteType.Blob);
-                    var c = cmd.Parameters.Add("$c", SqliteType.Integer);
-                    var o = cmd.Parameters.Add("$o", SqliteType.Integer);
-                    var oi = cmd.Parameters.Add("$oi", SqliteType.Blob);
-                    var u = cmd.Parameters.Add("$u", SqliteType.Blob);
-                    var cu = cmd.Parameters.Add("$cu", SqliteType.Blob);
-                    var ac = cmd.Parameters.Add("$ac", SqliteType.Integer);
-                    var op = cmd.Parameters.Add("$op", SqliteType.Integer);
-                    var t = cmd.Parameters.Add("$t", SqliteType.Blob);
-                    var m = cmd.Parameters.Add("$m", SqliteType.Text);
-
-                    foreach (var row in rows)
+                    using (var cmd = _connection.CreateCommand())
                     {
-                        a.Value = row.AuditId.ToByteArray();
-                        c.Value = ToUnix(row.CreatedOn);
-                        o.Value = row.ObjectTypeCode;
-                        oi.Value = Blob(row.ObjectId);
-                        u.Value = Blob(row.UserId);
-                        cu.Value = Blob(row.CallingUserId);
-                        ac.Value = row.Action;
-                        op.Value = row.Operation;
-                        t.Value = Blob(row.TransactionId);
-                        m.Value = (object)row.AttributeMask ?? DBNull.Value;
-                        cmd.ExecuteNonQuery();
-                    }
-                }
+                        cmd.Transaction = tx;
+                        cmd.CommandText =
+                            "INSERT OR REPLACE INTO audit(auditid, created_on, otc, object_id, user_id, " +
+                            "calling_user_id, action, operation, transaction_id, attribute_mask) " +
+                            "VALUES($a,$c,$o,$oi,$u,$cu,$ac,$op,$t,$m)";
+                        var a = cmd.Parameters.Add("$a", SqliteType.Blob);
+                        var c = cmd.Parameters.Add("$c", SqliteType.Integer);
+                        var o = cmd.Parameters.Add("$o", SqliteType.Integer);
+                        var oi = cmd.Parameters.Add("$oi", SqliteType.Blob);
+                        var u = cmd.Parameters.Add("$u", SqliteType.Blob);
+                        var cu = cmd.Parameters.Add("$cu", SqliteType.Blob);
+                        var ac = cmd.Parameters.Add("$ac", SqliteType.Integer);
+                        var op = cmd.Parameters.Add("$op", SqliteType.Integer);
+                        var t = cmd.Parameters.Add("$t", SqliteType.Blob);
+                        var m = cmd.Parameters.Add("$m", SqliteType.Text);
 
-                using (var del = _connection.CreateCommand())
-                using (var ins = _connection.CreateCommand())
-                {
-                    del.Transaction = tx;
-                    del.CommandText = "DELETE FROM audit_field WHERE auditid = $a";
-                    var da = del.Parameters.Add("$a", SqliteType.Blob);
-
-                    ins.Transaction = tx;
-                    ins.CommandText = "INSERT OR IGNORE INTO audit_field(auditid, column_number) VALUES($a,$c)";
-                    var ia = ins.Parameters.Add("$a", SqliteType.Blob);
-                    var ic = ins.Parameters.Add("$c", SqliteType.Integer);
-
-                    foreach (var row in rows)
-                    {
-                        var bytes = row.AuditId.ToByteArray();
-                        da.Value = bytes;
-                        del.ExecuteNonQuery();
-
-                        foreach (var number in ParseMask(row.AttributeMask))
+                        foreach (var row in rows)
                         {
-                            ia.Value = bytes;
-                            ic.Value = number;
-                            ins.ExecuteNonQuery();
+                            a.Value = row.AuditId.ToByteArray();
+                            c.Value = ToUnix(row.CreatedOn);
+                            o.Value = row.ObjectTypeCode;
+                            oi.Value = Blob(row.ObjectId);
+                            u.Value = Blob(row.UserId);
+                            cu.Value = Blob(row.CallingUserId);
+                            ac.Value = row.Action;
+                            op.Value = row.Operation;
+                            t.Value = Blob(row.TransactionId);
+                            m.Value = (object)row.AttributeMask ?? DBNull.Value;
+                            cmd.ExecuteNonQuery();
                         }
                     }
+
+                    using (var del = _connection.CreateCommand())
+                    using (var ins = _connection.CreateCommand())
+                    {
+                        del.Transaction = tx;
+                        del.CommandText = "DELETE FROM audit_field WHERE auditid = $a";
+                        var da = del.Parameters.Add("$a", SqliteType.Blob);
+
+                        ins.Transaction = tx;
+                        ins.CommandText = "INSERT OR IGNORE INTO audit_field(auditid, column_number) VALUES($a,$c)";
+                        var ia = ins.Parameters.Add("$a", SqliteType.Blob);
+                        var ic = ins.Parameters.Add("$c", SqliteType.Integer);
+
+                        foreach (var row in rows)
+                        {
+                            var bytes = row.AuditId.ToByteArray();
+                            da.Value = bytes;
+                            del.ExecuteNonQuery();
+
+                            foreach (var number in ParseMask(row.AttributeMask))
+                            {
+                                ia.Value = bytes;
+                                ic.Value = number;
+                                ins.ExecuteNonQuery();
+                            }
+                        }
+                    }
+
+                    tx.Commit();
                 }
 
-                tx.Commit();
+                return rows.Count;
             }
-
-            return rows.Count;
         }
 
         public static IEnumerable<int> ParseMask(string mask)
@@ -205,128 +218,155 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_field ON audit_field(column_number, auditid
 
         public void SavePrincipals(IDictionary<Guid, string> names)
         {
-            if (names.Count == 0) return;
-            using (var tx = _connection.BeginTransaction())
-            using (var cmd = _connection.CreateCommand())
+            lock (Gate)
             {
-                cmd.Transaction = tx;
-                cmd.CommandText = "INSERT OR REPLACE INTO principal(id, name) VALUES($i,$n)";
-                var i = cmd.Parameters.Add("$i", SqliteType.Blob);
-                var n = cmd.Parameters.Add("$n", SqliteType.Text);
-                foreach (var pair in names)
+                if (names.Count == 0) return;
+                using (var tx = _connection.BeginTransaction())
+                using (var cmd = _connection.CreateCommand())
                 {
-                    i.Value = pair.Key.ToByteArray();
-                    n.Value = (object)pair.Value ?? DBNull.Value;
-                    cmd.ExecuteNonQuery();
+                    cmd.Transaction = tx;
+                    cmd.CommandText = "INSERT OR REPLACE INTO principal(id, name) VALUES($i,$n)";
+                    var i = cmd.Parameters.Add("$i", SqliteType.Blob);
+                    var n = cmd.Parameters.Add("$n", SqliteType.Text);
+                    foreach (var pair in names)
+                    {
+                        i.Value = pair.Key.ToByteArray();
+                        n.Value = (object)pair.Value ?? DBNull.Value;
+                        cmd.ExecuteNonQuery();
+                    }
+                    tx.Commit();
                 }
-                tx.Commit();
             }
         }
 
         public void SaveObjectNames(int objectTypeCode, IDictionary<Guid, string> names)
         {
-            if (names.Count == 0) return;
-            using (var tx = _connection.BeginTransaction())
-            using (var cmd = _connection.CreateCommand())
+            lock (Gate)
             {
-                cmd.Transaction = tx;
-                cmd.CommandText = "INSERT OR REPLACE INTO object_name(otc, object_id, name) VALUES($o,$i,$n)";
-                var o = cmd.Parameters.Add("$o", SqliteType.Integer);
-                var i = cmd.Parameters.Add("$i", SqliteType.Blob);
-                var n = cmd.Parameters.Add("$n", SqliteType.Text);
-                foreach (var pair in names)
+                if (names.Count == 0) return;
+                using (var tx = _connection.BeginTransaction())
+                using (var cmd = _connection.CreateCommand())
                 {
-                    o.Value = objectTypeCode;
-                    i.Value = pair.Key.ToByteArray();
-                    n.Value = (object)pair.Value ?? DBNull.Value;
-                    cmd.ExecuteNonQuery();
+                    cmd.Transaction = tx;
+                    cmd.CommandText = "INSERT OR REPLACE INTO object_name(otc, object_id, name) VALUES($o,$i,$n)";
+                    var o = cmd.Parameters.Add("$o", SqliteType.Integer);
+                    var i = cmd.Parameters.Add("$i", SqliteType.Blob);
+                    var n = cmd.Parameters.Add("$n", SqliteType.Text);
+                    foreach (var pair in names)
+                    {
+                        o.Value = objectTypeCode;
+                        i.Value = pair.Key.ToByteArray();
+                        n.Value = (object)pair.Value ?? DBNull.Value;
+                        cmd.ExecuteNonQuery();
+                    }
+                    tx.Commit();
                 }
-                tx.Commit();
             }
         }
 
         public void MarkWindowComplete(int objectTypeCode, DateRange window, int rowsLoaded)
         {
-            using (var cmd = _connection.CreateCommand())
+            lock (Gate)
             {
-                cmd.CommandText =
-                    "INSERT OR REPLACE INTO sync_window(otc, from_utc, to_utc, completed_on, rows_loaded) " +
-                    "VALUES($o,$f,$t,$c,$r)";
-                cmd.Parameters.AddWithValue("$o", objectTypeCode);
-                cmd.Parameters.AddWithValue("$f", ToUnix(window.FromUtc));
-                cmd.Parameters.AddWithValue("$t", ToUnix(window.ToUtc));
-                cmd.Parameters.AddWithValue("$c", ToUnix(DateTime.UtcNow));
-                cmd.Parameters.AddWithValue("$r", rowsLoaded);
-                cmd.ExecuteNonQuery();
+                using (var cmd = _connection.CreateCommand())
+                {
+                    cmd.CommandText =
+                        "INSERT OR REPLACE INTO sync_window(otc, from_utc, to_utc, completed_on, rows_loaded) " +
+                        "VALUES($o,$f,$t,$c,$r)";
+                    cmd.Parameters.AddWithValue("$o", objectTypeCode);
+                    cmd.Parameters.AddWithValue("$f", ToUnix(window.FromUtc));
+                    cmd.Parameters.AddWithValue("$t", ToUnix(window.ToUtc));
+                    cmd.Parameters.AddWithValue("$c", ToUnix(DateTime.UtcNow));
+                    cmd.Parameters.AddWithValue("$r", rowsLoaded);
+                    cmd.ExecuteNonQuery();
+                }
             }
         }
 
         public bool IsWindowComplete(int objectTypeCode, DateRange window)
         {
-            using (var cmd = _connection.CreateCommand())
+            lock (Gate)
             {
-                cmd.CommandText = "SELECT 1 FROM sync_window WHERE otc=$o AND from_utc=$f AND to_utc=$t";
-                cmd.Parameters.AddWithValue("$o", objectTypeCode);
-                cmd.Parameters.AddWithValue("$f", ToUnix(window.FromUtc));
-                cmd.Parameters.AddWithValue("$t", ToUnix(window.ToUtc));
-                return cmd.ExecuteScalar() != null;
+                using (var cmd = _connection.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT 1 FROM sync_window WHERE otc=$o AND from_utc=$f AND to_utc=$t";
+                    cmd.Parameters.AddWithValue("$o", objectTypeCode);
+                    cmd.Parameters.AddWithValue("$f", ToUnix(window.FromUtc));
+                    cmd.Parameters.AddWithValue("$t", ToUnix(window.ToUtc));
+                    return cmd.ExecuteScalar() != null;
+                }
             }
         }
 
         public void ForgetWindows(int objectTypeCode)
         {
-            using (var cmd = _connection.CreateCommand())
+            lock (Gate)
             {
-                cmd.CommandText = "DELETE FROM sync_window WHERE otc=$o";
-                cmd.Parameters.AddWithValue("$o", objectTypeCode);
-                cmd.ExecuteNonQuery();
+                using (var cmd = _connection.CreateCommand())
+                {
+                    cmd.CommandText = "DELETE FROM sync_window WHERE otc=$o";
+                    cmd.Parameters.AddWithValue("$o", objectTypeCode);
+                    cmd.ExecuteNonQuery();
+                }
             }
         }
 
         public AuditDetailPayload GetDetail(Guid auditId)
         {
-            using (var cmd = _connection.CreateCommand())
+            lock (Gate)
             {
-                cmd.CommandText = "SELECT payload FROM audit_detail WHERE auditid=$a";
-                cmd.Parameters.AddWithValue("$a", auditId.ToByteArray());
-                var value = cmd.ExecuteScalar() as string;
-                return value == null ? null : DetailSerializer.Deserialize(value);
+                using (var cmd = _connection.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT payload FROM audit_detail WHERE auditid=$a";
+                    cmd.Parameters.AddWithValue("$a", auditId.ToByteArray());
+                    var value = cmd.ExecuteScalar() as string;
+                    return value == null ? null : DetailSerializer.Deserialize(value);
+                }
             }
         }
 
         public void SaveDetail(AuditDetailPayload payload)
         {
-            using (var cmd = _connection.CreateCommand())
+            lock (Gate)
             {
-                cmd.CommandText =
-                    "INSERT OR REPLACE INTO audit_detail(auditid, fetched_on, payload) VALUES($a,$f,$p)";
-                cmd.Parameters.AddWithValue("$a", payload.AuditId.ToByteArray());
-                cmd.Parameters.AddWithValue("$f", ToUnix(DateTime.UtcNow));
-                cmd.Parameters.AddWithValue("$p", DetailSerializer.Serialize(payload));
-                cmd.ExecuteNonQuery();
+                using (var cmd = _connection.CreateCommand())
+                {
+                    cmd.CommandText =
+                        "INSERT OR REPLACE INTO audit_detail(auditid, fetched_on, payload) VALUES($a,$f,$p)";
+                    cmd.Parameters.AddWithValue("$a", payload.AuditId.ToByteArray());
+                    cmd.Parameters.AddWithValue("$f", ToUnix(DateTime.UtcNow));
+                    cmd.Parameters.AddWithValue("$p", DetailSerializer.Serialize(payload));
+                    cmd.ExecuteNonQuery();
+                }
             }
         }
 
         public CacheStats Stats()
         {
-            var stats = new CacheStats { SizeBytes = CacheLocator.SizeOnDisk(DatabasePath) };
-            stats.AuditRows = Scalar("SELECT COUNT(*) FROM audit");
-            stats.DetailRows = Scalar("SELECT COUNT(*) FROM audit_detail");
-            stats.Entities = Scalar("SELECT COUNT(DISTINCT otc) FROM audit");
-            var min = ScalarOrNull("SELECT MIN(created_on) FROM audit");
-            var max = ScalarOrNull("SELECT MAX(created_on) FROM audit");
-            if (min.HasValue) stats.OldestUtc = FromUnix(min.Value);
-            if (max.HasValue) stats.NewestUtc = FromUnix(max.Value);
-            return stats;
+            lock (Gate)
+            {
+                var stats = new CacheStats { SizeBytes = CacheLocator.SizeOnDisk(DatabasePath) };
+                stats.AuditRows = Scalar("SELECT COUNT(*) FROM audit");
+                stats.DetailRows = Scalar("SELECT COUNT(*) FROM audit_detail");
+                stats.Entities = Scalar("SELECT COUNT(DISTINCT otc) FROM audit");
+                var min = ScalarOrNull("SELECT MIN(created_on) FROM audit");
+                var max = ScalarOrNull("SELECT MAX(created_on) FROM audit");
+                if (min.HasValue) stats.OldestUtc = FromUnix(min.Value);
+                if (max.HasValue) stats.NewestUtc = FromUnix(max.Value);
+                return stats;
+            }
         }
 
         public void Dispose()
         {
-            if (_connection == null) return;
-            try { Exec("PRAGMA optimize;"); }
-            catch (SqliteException) { }
-            _connection.Close();
-            _connection.Dispose();
+            lock (Gate)
+            {
+                if (_connection == null) return;
+                try { Exec("PRAGMA optimize;"); }
+                catch (SqliteException) { }
+                _connection.Close();
+                _connection.Dispose();
+            }
         }
 
         internal SqliteConnection Connection { get { return _connection; } }

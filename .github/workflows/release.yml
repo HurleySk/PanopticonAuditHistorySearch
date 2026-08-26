@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and pack without pushing to NuGet'
+        type: boolean
+        default: true
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Read project version
+        id: version
+        shell: pwsh
+        run: |
+          [xml]$proj = Get-Content PanopticonAuditHistorySearch.csproj
+          $version = $proj.Project.PropertyGroup.Version | Where-Object { $_ }
+          if (-not $version) { throw 'No <Version> found in the csproj.' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Project version: $version"
+
+      - name: Verify tag matches project version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'.TrimStart('v')
+          $version = '${{ steps.version.outputs.version }}'
+          if ($tag -ne $version) {
+            throw "Tag $tag does not match csproj version $version. The XrmToolBox Tool Store requires the package and assembly versions to match."
+          }
+
+      - name: Build
+        run: dotnet build --configuration Release
+
+      - name: Verify assembly version matches package version
+        shell: pwsh
+        run: |
+          $dll = 'bin\Release\net48\PanopticonAuditHistorySearch.dll'
+          $asm = [System.Reflection.AssemblyName]::GetAssemblyName((Resolve-Path $dll)).Version.ToString()
+          $version = '${{ steps.version.outputs.version }}'
+          if ($asm -ne $version) {
+            throw "Assembly version $asm does not match package version $version. The Tool Store would report a permanent update-available state."
+          }
+
+      - name: Pack
+        run: dotnet pack --configuration Release --no-build
+
+      - name: Verify package layout
+        shell: pwsh
+        run: |
+          $pkg = Get-ChildItem bin\Release\*.nupkg | Select-Object -First 1
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($pkg.FullName)
+          try {
+            $names = $zip.Entries.FullName
+            $rootDlls = $names | Where-Object { $_ -match '^Plugins/[^/]+\.dll$' }
+            if ($rootDlls.Count -ne 1) {
+              throw "Expected exactly one DLL at the root of Plugins/, found: $($rootDlls -join ', '). XrmToolBox treats every root DLL as a candidate tool."
+            }
+            if ($names -notcontains 'Plugins/PanopticonAuditHistorySearch.dll') { throw 'Plugin DLL missing from Plugins/.' }
+            Write-Host "Package layout OK: $($names -join ', ')"
+          } finally { $zip.Dispose() }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: bin/Release/*.nupkg
+
+      - name: Push to NuGet
+        if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        shell: pwsh
+        run: |
+          if (-not $env:NUGET_API_KEY) { throw 'NUGET_API_KEY secret is not set.' }
+          dotnet nuget push bin\Release\*.nupkg --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create ${{ github.ref_name }} bin/Release/*.nupkg --title ${{ github.ref_name }} --generate-notes

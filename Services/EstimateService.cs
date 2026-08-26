@@ -42,7 +42,7 @@ namespace PanopticonAuditHistorySearch.Services
         {
             try
             {
-                var exact = Count(entity, scope.FromUtc, scope.ToUtc, token);
+                var exact = Count(entity, scope.EffectiveFromUtc, scope.EffectiveToUtc, token);
                 return new EntityEstimate { Entity = entity, Rows = exact, Sampled = false };
             }
             catch (FaultException<OrganizationServiceFault> fault)
@@ -54,9 +54,9 @@ namespace PanopticonAuditHistorySearch.Services
 
         private EntityEstimate Sample(EntityScope entity, SyncScope scope, CancellationToken token)
         {
-            var sampleTo = scope.ToUtc;
+            var sampleTo = scope.EffectiveToUtc;
             var sampleFrom = sampleTo.AddDays(-SampleDays);
-            if (sampleFrom < scope.FromUtc) sampleFrom = scope.FromUtc;
+            if (sampleFrom < scope.EffectiveFromUtc) sampleFrom = scope.EffectiveFromUtc;
 
             var sampleDays = Math.Max(0.5, (sampleTo - sampleFrom).TotalDays);
 
@@ -67,7 +67,7 @@ namespace PanopticonAuditHistorySearch.Services
                 return new EntityEstimate
                 {
                     Entity = entity,
-                    Rows = (long)Math.Round(perDay * scope.SpanDays),
+                    Rows = (long)Math.Round(perDay * scope.EffectiveSpanDays),
                     Sampled = true,
                     Note = string.Format("extrapolated from {0:N0} rows over the last {1:N0} day(s)",
                         sampled, sampleDays)

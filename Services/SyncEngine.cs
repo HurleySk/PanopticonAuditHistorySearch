@@ -59,7 +59,8 @@ namespace PanopticonAuditHistorySearch.Services
                         string.Format("{0:N0} rows", loaded));
                 }
 
-                _cache.MarkWindowComplete(unit.Entity.ObjectTypeCode, unit.Window, loaded);
+                if (unit.Window.ToUtc <= DateTime.UtcNow)
+                    _cache.MarkWindowComplete(unit.Entity.ObjectTypeCode, unit.Window, loaded);
                 outcome.WindowsLoaded++;
             }
 
