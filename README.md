@@ -2,7 +2,7 @@
 
 An XrmToolBox plugin for searching Dataverse audit history across many tables at once.
 
-> **0.1.0.1 - alpha.** Feature-complete against the v1 scope and verified for build, packaging, plugin load and cache/search behaviour, but not yet exercised end to end against a live Dataverse org. Expect rough edges, and treat the cache format as unstable.
+> **0.1.0.2 - alpha.** Feature-complete against the v1 scope and verified for build, packaging, plugin load and cache/search behaviour, but not yet exercised end to end against a live Dataverse org. Expect rough edges, and treat the cache format as unstable.
 
 Dataverse makes audit data hard to interrogate. The Audit Summary view only sorts by Changed Date, its Record filter does not work, and Microsoft does not support exporting audit logs at all - the SDK is the only way out. Answering "who set this field to X, and when?" across a table normally means hand-writing FetchXML and a detail-fetch loop.
 
@@ -92,6 +92,8 @@ dotnet pack --configuration Release
 
 The main DLL packs to `Plugins/`; SQLite dependencies pack to `Plugins/Dependencies/`. Both the NuGet package and `deploy.ps1` must keep dependencies in that subfolder: XrmToolBox treats every DLL at the root of `Plugins/` as a candidate tool, so a dependency left there is reported under "Tools not loaded" at startup, and the Tool Store validator separately rejects it for not matching the package version.
 
+The icon ships as a deprecated `PackageIconUrl` only, with no embedded `PackageIcon`. When a package embeds an icon, nuget.org serves it from `/v3-flatcontainer/<id>/<version>/icon` as `application/octet-stream` with `X-Content-Type-Options: nosniff`, and the Tool Library registration rejects it with "Logo Url is not valid". With `iconUrl` alone, nuget.org proxies the image and serves it as `image/png`, which is what every tool already in the library does. `NU5048` is suppressed for this reason - do not "fix" it by switching to `PackageIcon`.
+
 XrmToolBox applies no binding redirects to plugin assemblies, so `SQLitePCLRaw.bundle_winsqlite3` is pinned to the exact version `Microsoft.Data.Sqlite` references (2.1.6.2060 for 8.0.10). A newer bundle builds and passes tests - the test host generates redirects - then fails at runtime inside XrmToolBox with a `FileNotFoundException` on `SQLitePCLRaw.core`. Bump both together or not at all.
 
 ## Releasing
@@ -103,7 +105,7 @@ The trust lives on nuget.org, not here: under your username > **Trusted Publishi
 Then bump `<Version>` in the csproj and `AssemblyVersion`/`AssemblyFileVersion` in `Properties/AssemblyInfo.cs` to the same 4-part value, and tag:
 
 ```bash
-git tag v0.1.0.2 && git push --tags
+git tag v0.1.0.3 && git push --tags
 ```
 
 The workflow refuses to publish unless the tag, the csproj version and the built assembly version all agree, and unless exactly one DLL sits at the root of `Plugins/`. Run it from the Actions tab with **dry run** ticked to build and inspect the package without pushing.

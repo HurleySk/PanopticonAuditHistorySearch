@@ -11,7 +11,7 @@
     <AssemblyName>PanopticonAuditHistorySearch</AssemblyName>
     <RootNamespace>PanopticonAuditHistorySearch</RootNamespace>
     <Title>Panopticon Audit History Search</Title>
-    <Version>0.1.0.1</Version>
+    <Version>0.1.0.2</Version>
     <Authors>Samuel Hurley</Authors>
     <Company>Procentrix</Company>
     <Copyright>Copyright (c) Samuel Hurley 2026</Copyright>
@@ -19,10 +19,9 @@
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
     <IncludeBuildOutput>false</IncludeBuildOutput>
-    <NoWarn>$(NoWarn);NU5100;NU5128</NoWarn>
+    <NoWarn>$(NoWarn);NU5048;NU5100;NU5128</NoWarn>
 
     <PackageProjectUrl>https://github.com/HurleySk/PanopticonAuditHistorySearch</PackageProjectUrl>
-    <PackageIcon>icon-128.png</PackageIcon>
     <PackageIconUrl>https://raw.githubusercontent.com/HurleySk/PanopticonAuditHistorySearch/main/Resources/icon-128.png</PackageIconUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>XrmToolBox;Dynamics365;Dataverse;PowerPlatform;Audit</PackageTags>
@@ -48,7 +47,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Resources\icon-128.png" Pack="true" PackagePath="\" />
     <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="Plugins\" />
     <None Include="$(OutputPath)\Microsoft.Data.Sqlite.dll" Pack="true" PackagePath="Plugins\Dependencies\" />
