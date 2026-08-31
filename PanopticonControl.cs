@@ -265,7 +265,7 @@ namespace PanopticonAuditHistorySearch
         private void ResetRange(int days)
         {
             dtpTo.Value = DateTime.Today;
-            dtpFrom.Value = DateTime.Today.AddDays(-days);
+            dtpFrom.Value = DateTime.Today.AddDays(-(days - 1));
             range_ValueChanged(this, EventArgs.Empty);
         }
 
@@ -350,7 +350,8 @@ namespace PanopticonAuditHistorySearch
             var reporter = new Progress<SyncProgress>(p =>
             {
                 progress.Value = Math.Min(100, p.Percent);
-                lblStatus.Text = string.Format("{0}   ({1:N0} rows so far)", p.Message, p.RowsLoaded);
+                lblStatus.Text = string.Format("{0}   (window {1:N0} of {2:N0}, {3:N0} rows cached)",
+                    p.Message, p.UnitsCompleted, p.UnitsTotal, p.RowsLoaded);
             });
 
             WorkAsync(new WorkAsyncInfo
@@ -882,6 +883,7 @@ namespace PanopticonAuditHistorySearch
             TearDownCache();
             try { CacheLocator.Delete(path); }
             catch (IOException ex) { ShowError("Could not delete every cache file.", ex); }
+            catch (UnauthorizedAccessException ex) { ShowError("Could not delete every cache file.", ex); }
 
             _cache = new AuditCache(path);
             _search = new AuditSearch(_cache);

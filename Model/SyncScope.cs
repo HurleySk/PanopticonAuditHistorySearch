@@ -20,7 +20,7 @@ namespace PanopticonAuditHistorySearch.Model
             return new SyncScope
             {
                 Entities = new List<EntityScope>(),
-                FromUtc = now.Date.AddDays(-DefaultDays),
+                FromUtc = now.Date.AddDays(-(DefaultDays - 1)),
                 ToUtc = now
             };
         }

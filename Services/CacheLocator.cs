@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace PanopticonAuditHistorySearch.Services
 {
@@ -47,8 +48,32 @@ namespace PanopticonAuditHistorySearch.Services
             var dir = Path.GetDirectoryName(databasePath);
             var name = Path.GetFileName(databasePath);
             if (!Directory.Exists(dir)) return;
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
             foreach (var file in Directory.GetFiles(dir, name + "*"))
-                File.Delete(file);
+                DeleteWithRetry(file);
+        }
+
+        private static void DeleteWithRetry(string file)
+        {
+            for (var attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    File.Delete(file);
+                    return;
+                }
+                catch (IOException) when (attempt < 9)
+                {
+                    Thread.Sleep(100);
+                }
+                catch (UnauthorizedAccessException) when (attempt < 9)
+                {
+                    Thread.Sleep(100);
+                }
+            }
         }
     }
 }

@@ -11,7 +11,7 @@
     <AssemblyName>PanopticonAuditHistorySearch</AssemblyName>
     <RootNamespace>PanopticonAuditHistorySearch</RootNamespace>
     <Title>Panopticon Audit History Search</Title>
-    <Version>0.1.0.3</Version>
+    <Version>0.1.0.4</Version>
     <Authors>Samuel Hurley</Authors>
     <Company>Sam Hurley</Company>
     <Copyright>Copyright (c) Samuel Hurley 2026</Copyright>
@@ -25,7 +25,7 @@
     <PackageIconUrl>https://raw.githubusercontent.com/HurleySk/PanopticonAuditHistorySearch/main/Resources/icon-128.png</PackageIconUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>XrmToolBox;Dynamics365;Dataverse;PowerPlatform;Audit</PackageTags>
-    <PackageReleaseNotes>First alpha (0.x: unstable, cache format may change). Feature-complete against the v1 scope but not yet exercised against a live Dataverse org.</PackageReleaseNotes>
+    <PackageReleaseNotes>Quick date ranges now select exactly 30, 90 or 365 days. Sync progress names the table and window being processed. Purging the cache no longer fails with the file in use.</PackageReleaseNotes>
     <RepositoryUrl>https://github.com/HurleySk/PanopticonAuditHistorySearch</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

@@ -12,6 +12,7 @@ namespace PanopticonAuditHistorySearch.Services
 
         private readonly SqliteConnection _connection;
         private readonly object _gate = new object();
+        private bool _disposed;
 
         public object Gate { get { return _gate; } }
 
@@ -25,7 +26,8 @@ namespace PanopticonAuditHistorySearch.Services
             {
                 DataSource = databasePath,
                 Mode = SqliteOpenMode.ReadWriteCreate,
-                Cache = SqliteCacheMode.Private
+                Cache = SqliteCacheMode.Private,
+                Pooling = false
             }.ToString());
             _connection.Open();
             Exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA temp_store=MEMORY;");
@@ -361,10 +363,12 @@ CREATE INDEX IF NOT EXISTS ix_field_audit ON audit_field(auditid);");
         {
             lock (Gate)
             {
-                if (_connection == null) return;
-                try { Exec("PRAGMA optimize;"); }
+                if (_disposed) return;
+                _disposed = true;
+                try { Exec("PRAGMA optimize; PRAGMA wal_checkpoint(TRUNCATE);"); }
                 catch (SqliteException) { }
                 _connection.Close();
+                SqliteConnection.ClearPool(_connection);
                 _connection.Dispose();
             }
         }

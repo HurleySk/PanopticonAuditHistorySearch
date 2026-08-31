@@ -46,7 +46,7 @@ namespace PanopticonAuditHistorySearch.Services
                 if (_cache.IsWindowComplete(unit.Entity.ObjectTypeCode, unit.Window))
                 {
                     outcome.WindowsSkipped++;
-                    Report(progress, completed, units.Count, unit, outcome, "already cached");
+                    Report(progress, completed, units.Count, unit, outcome, true);
                     continue;
                 }
 
@@ -55,8 +55,7 @@ namespace PanopticonAuditHistorySearch.Services
                 {
                     loaded += _cache.SaveAuditRows(page);
                     outcome.RowsLoaded += page.Count;
-                    Report(progress, completed, units.Count, unit, outcome,
-                        string.Format("{0:N0} rows", loaded));
+                    Report(progress, completed, units.Count, unit, outcome, false);
                 }
 
                 if (unit.Window.ToUtc <= DateTime.UtcNow)
@@ -69,7 +68,7 @@ namespace PanopticonAuditHistorySearch.Services
         }
 
         private static void Report(IProgress<SyncProgress> progress, int completed, int total,
-            SyncUnit unit, SyncOutcome outcome, string note)
+            SyncUnit unit, SyncOutcome outcome, bool alreadyCached)
         {
             if (progress == null) return;
             progress.Report(new SyncProgress
@@ -77,8 +76,9 @@ namespace PanopticonAuditHistorySearch.Services
                 UnitsCompleted = completed,
                 UnitsTotal = total,
                 RowsLoaded = outcome.RowsLoaded,
-                Message = string.Format("{0}  {1:MMM yyyy}  -  {2}",
-                    unit.Entity.DisplayName, unit.Window.FromUtc, note)
+                Message = string.Format("{0} {1}  {2:MMM yyyy}",
+                    alreadyCached ? "Skipping" : "Processing",
+                    unit.Entity.DisplayName, unit.Window.FromUtc)
             });
         }
     }
